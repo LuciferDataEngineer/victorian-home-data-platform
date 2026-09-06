@@ -1,0 +1,24 @@
+profile_version: 1
+purchase_price_max: null
+available_deposit: null
+use_cases:
+  - owner_occupied
+  - investment
+property_types:
+  - house
+  - unit
+  - townhouse
+  - residential_land
+geographies:
+  state: VIC
+  regions: []
+  lgas: []
+  suburbs: []
+ranking_cohorts:
+  - metropolitan_house
+  - metropolitan_unit
+  - metropolitan_townhouse
+  - regional_house
+  - regional_unit
+  - residential_land
+

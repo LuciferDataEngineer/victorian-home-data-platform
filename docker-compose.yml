@@ -1,0 +1,28 @@
+services:
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.33.0
+    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
+    volumes:
+      - azurite-data:/data
+    restart: unless-stopped
+
+  sqlserver:
+    image: mcr.microsoft.com/azure-sql-edge:2.0.0
+    platform: linux/amd64
+    environment:
+      ACCEPT_EULA: "1"
+      MSSQL_SA_PASSWORD: "LocalOnly_StrongPassword123!"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sql-data:/var/opt/mssql
+    restart: unless-stopped
+
+volumes:
+  azurite-data:
+  sql-data:
+

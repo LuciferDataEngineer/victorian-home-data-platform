@@ -1,0 +1,44 @@
+name: free-cloud-refresh
+
+on:
+  schedule:
+    - cron: '17 */12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: free-cloud-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install '.[free-cloud]'
+      - name: Refresh medallion and publish Gold
+        env:
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERT_TO_EMAIL: ${{ vars.ALERT_TO_EMAIL }}
+          ALERT_FROM_EMAIL: ${{ vars.ALERT_FROM_EMAIL }}
+          ALERT_DRY_RUN: ${{ vars.ALERT_DRY_RUN || 'true' }}
+        run: home-data free-cloud-refresh
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-failure-logs
+          path: logs/
+          retention-days: 7

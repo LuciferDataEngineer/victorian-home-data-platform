@@ -1,0 +1,55 @@
+model: Victorian Home Investment Screen
+version: 1
+storage_mode:
+  development: import
+  production: incremental_import
+source:
+  database: homeinsights
+  schema: mart
+tables:
+  roi_screen:
+    source: vw_powerbi_roi_screen
+    grain: [as_of_date, suburb, property_type, bedroom_label, score_version]
+    hidden_columns: [score_version]
+  data_freshness:
+    source: vw_powerbi_data_freshness
+    grain: [source_name, entity_name]
+measures:
+  suburb_segments:
+    dax: DISTINCTCOUNT(roi_screen[suburb])
+    format: '#,0'
+  median_sale_price:
+    dax: MEDIAN(roi_screen[median_price])
+    format: '$#,0'
+  median_weekly_rent:
+    dax: MEDIAN(roi_screen[median_weekly_rent])
+    format: '$#,0'
+  median_gross_yield:
+    dax: MEDIAN(roi_screen[estimated_gross_yield_pct]) / 100
+    format: '0.00%'
+  median_price_growth_cagr:
+    dax: MEDIAN(roi_screen[price_growth_cagr_pct]) / 100
+    format: '0.00%'
+  latest_refresh_utc:
+    dax: MAX(data_freshness[completed_at])
+relationships: []
+filters:
+  - suburb
+  - property_type
+  - bedroom_label
+  - as_of_date
+  - match_quality
+refresh_policy:
+  incremental_column: as_of_date
+  archive_years: 10
+  refresh_days: 14
+  gateway_required: false
+security:
+  workspace_roles:
+    viewer: Entra group for consumers
+    contributor: Entra group for report authors
+  database_role: powerbi_reader
+warnings:
+  - Gross yield excludes costs, vacancy, financing and tax.
+  - Indicative score is a screening aid, not investment advice.
+  - Hide rankings when the freshness view reports a failed or stale required source.

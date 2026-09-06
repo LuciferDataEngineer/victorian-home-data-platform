@@ -1,0 +1,50 @@
+name: deploy-azure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [dev, prod]
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    environment: ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: azure/arm-deploy@v2
+        id: infrastructure
+        with:
+          scope: subscription
+          region: australiaeast
+          template: infra/bicep/main.bicep
+          parameters: >-
+            environment=${{ inputs.environment }}
+            sqlAdministratorObjectId=${{ vars.SQL_ENTRA_ADMIN_OBJECT_ID }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Build Function deployment package
+        run: |
+          mkdir -p function-package/.python_packages/lib/site-packages
+          pip install '.[azure]' 'azure-functions>=1.21,<2' --target function-package/.python_packages/lib/site-packages
+          cp azure_function/function_app.py azure_function/host.json function-package/
+          cp -R config function-package/
+          cd function-package
+          zip -qr ../function-package.zip .
+      - uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ steps.infrastructure.outputs.functionAppName }}
+          package: function-package.zip

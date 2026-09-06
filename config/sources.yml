@@ -1,0 +1,27 @@
+sources:
+  sample_sales:
+    domain: property_market
+    entity: suburb_sales
+    expected_cadence: quarterly
+    licence: CC-BY-4.0
+    enabled: true
+  sample_rents:
+    domain: rental_market
+    entity: suburb_rents
+    expected_cadence: quarterly
+    licence: CC-BY-4.0
+    enabled: true
+  vgv_annual_sales:
+    domain: property_market
+    entity: suburb_sales
+    expected_cadence: annual
+    licence: CC-BY-4.0
+    landing_page: https://www.land.vic.gov.au/valuations/resources-and-reports/property-sales-statistics
+    enabled: true
+  homes_victoria_rents:
+    domain: rental_market
+    entity: moving_annual_rents_by_suburb
+    expected_cadence: quarterly
+    licence: CC-BY-4.0
+    metadata_api: https://discover.data.vic.gov.au/api/3/action/package_show?id=rental-report-quarterly-moving-annual-rents-by-suburb
+    enabled: true
