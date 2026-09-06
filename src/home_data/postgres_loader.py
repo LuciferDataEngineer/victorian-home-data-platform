@@ -6,6 +6,15 @@ import pandas as pd
 LOGGER = logging.getLogger(__name__)
 
 
+def _normalise_nullable_integer(series: pd.Series) -> pd.Series:
+    """Produce Python ints/None so PostgreSQL COPY does not receive values like 2.0."""
+    return pd.Series(
+        (int(value) if pd.notna(value) else None for value in series),
+        index=series.index,
+        dtype=object,
+    )
+
+
 def load_roi_to_postgres(database_url: str, roi_path: Path, unmatched_path: Path) -> dict[str, int]:
     """Transactionally upsert Gold outputs into Supabase-compatible PostgreSQL."""
     import psycopg
@@ -30,6 +39,7 @@ def load_roi_to_postgres(database_url: str, roi_path: Path, unmatched_path: Path
         columns={"observation_date": "price_observation_date", "period_end": "rent_period_end"}
     )
     roi = roi.astype(object).where(pd.notna(roi), None)
+    roi["bedrooms"] = _normalise_nullable_integer(roi["bedrooms"])
     unmatched = unmatched.astype(object).where(pd.notna(unmatched), None)
     with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
         cursor.execute("TRUNCATE mart.suburb_roi_screen_stage")

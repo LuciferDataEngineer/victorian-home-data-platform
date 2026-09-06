@@ -16,6 +16,7 @@ from home_data.pipeline import (
     parse_vgv_annual_workbook,
     validate_frame,
 )
+from home_data.postgres_loader import _normalise_nullable_integer
 from home_data.r2_sync import R2MedallionSync, normalise_r2_endpoint
 from home_data.sources import HomesVictoriaRentalAdapter, VgvAnnualSalesAdapter
 from home_data.storage import LocalMedallionStore
@@ -230,3 +231,9 @@ def test_r2_download_ignores_dashboard_folder_markers(tmp_path):
     sync.client = FakeClient()
     assert sync.download(tmp_path) == 1
     assert sync.client.downloads[0][1] == "manual-input/vgv/houses.xlsx"
+
+
+def test_postgres_smallint_values_are_serialised_as_integers():
+    values = _normalise_nullable_integer(pd.Series([2.0, 3.0, None]))
+    assert values.tolist() == [2, 3, None]
+    assert isinstance(values.iloc[0], int)
