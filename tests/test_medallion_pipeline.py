@@ -1,3 +1,4 @@
+import hashlib
 import json
 
 import httpx
@@ -6,6 +7,7 @@ from openpyxl import Workbook
 
 from home_data.alerts import send_gold_change_alert
 from home_data.geography import canonical_suburb_key
+from home_data.operations import _manual_vgv_inputs_changed
 from home_data.pipeline import (
     build_gold,
     build_roi_gold,
@@ -14,7 +16,7 @@ from home_data.pipeline import (
     parse_vgv_annual_workbook,
     validate_frame,
 )
-from home_data.r2_sync import normalise_r2_endpoint
+from home_data.r2_sync import R2MedallionSync, normalise_r2_endpoint
 from home_data.sources import HomesVictoriaRentalAdapter, VgvAnnualSalesAdapter
 from home_data.storage import LocalMedallionStore
 
@@ -185,3 +187,46 @@ def test_r2_endpoint_accepts_bucket_qualified_url():
         )
         == account
     )
+
+
+def test_manual_vgv_change_detection_is_idempotent(tmp_path):
+    input_dir = tmp_path / "manual-input" / "vgv"
+    input_dir.mkdir(parents=True)
+    payloads = {
+        "houses.xlsx": b"houses",
+        "units.xlsx": b"units",
+        "land.xlsx": b"land",
+    }
+    for name, content in payloads.items():
+        (input_dir / name).write_bytes(content)
+    assert _manual_vgv_inputs_changed(tmp_path)
+
+    for index, content in enumerate(payloads.values()):
+        manifest_dir = tmp_path / "bronze" / "vgv_annual_sales" / str(index)
+        manifest_dir.mkdir(parents=True)
+        (manifest_dir / "manifest.json").write_text(
+            json.dumps({"sha256": hashlib.sha256(content).hexdigest()})
+        )
+    assert not _manual_vgv_inputs_changed(tmp_path)
+
+
+def test_r2_download_ignores_dashboard_folder_markers(tmp_path):
+    class FakePaginator:
+        def paginate(self, **_kwargs):
+            return [{"Contents": [{"Key": "manual-input/vgv/"}, {"Key": "manual-input/vgv/houses.xlsx"}]}]
+
+    class FakeClient:
+        def __init__(self):
+            self.downloads = []
+
+        def get_paginator(self, _name):
+            return FakePaginator()
+
+        def download_file(self, bucket, key, target):
+            self.downloads.append((bucket, key, target))
+
+    sync = R2MedallionSync.__new__(R2MedallionSync)
+    sync.bucket = "test-bucket"
+    sync.client = FakeClient()
+    assert sync.download(tmp_path) == 1
+    assert sync.client.downloads[0][1] == "manual-input/vgv/houses.xlsx"

@@ -43,9 +43,15 @@ class R2MedallionSync:
         paginator = self.client.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=self.bucket):
             for item in page.get("Contents", []):
-                target = local_root / item["Key"]
+                key = item["Key"]
+                # The R2 dashboard represents folders as zero-byte objects. They
+                # are display markers, not pipeline inputs, and downloading one
+                # as a file would block creation of its child directory.
+                if key.endswith("/"):
+                    continue
+                target = local_root / key
                 target.parent.mkdir(parents=True, exist_ok=True)
-                self.client.download_file(self.bucket, item["Key"], str(target))
+                self.client.download_file(self.bucket, key, str(target))
                 count += 1
         LOGGER.info("R2 synchronised down", extra={"stage": "cloud_sync", "rows": count})
         return count

@@ -42,7 +42,9 @@ Email is content-hash idempotent. An unchanged ROI screen does not generate anot
 
 ## 5 Load the official VGV history
 
-The publisher currently blocks automated workbook download. Download the house, unit and land workbooks through its website and run locally:
+The publisher currently blocks automated workbook download. Download the house, unit and land workbooks through its website and upload them to the private R2 prefix `manual-input/vgv/` with the canonical names `houses.xlsx`, `units.xlsx`, and `land.xlsx`. The next scheduled refresh detects a complete, previously unseen set and promotes it through Bronze and Silver before rebuilding Gold.
+
+For local development, the equivalent command is:
 
 ```bash
 home-data run --source vgv_annual_sales --input-dir ./manual-input/vgv
