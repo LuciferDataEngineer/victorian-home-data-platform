@@ -1,7 +1,19 @@
 import logging
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 LOGGER = logging.getLogger(__name__)
+
+
+def normalise_r2_endpoint(endpoint_url: str, bucket: str) -> str:
+    """Accept Cloudflare's account endpoint or a copied bucket-qualified endpoint."""
+    parsed = urlsplit(endpoint_url.strip())
+    path = parsed.path.rstrip("/")
+    if path == f"/{bucket}":
+        path = ""
+    elif path:
+        raise ValueError("R2 endpoint must not contain a path other than the configured bucket")
+    return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
 
 
 class R2MedallionSync:
@@ -19,7 +31,7 @@ class R2MedallionSync:
         self.bucket = bucket
         self.client = boto3.client(
             "s3",
-            endpoint_url=endpoint_url,
+            endpoint_url=normalise_r2_endpoint(endpoint_url, bucket),
             aws_access_key_id=access_key_id,
             aws_secret_access_key=secret_access_key,
             region_name="auto",

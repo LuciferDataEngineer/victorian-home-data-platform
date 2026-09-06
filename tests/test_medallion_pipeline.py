@@ -14,6 +14,7 @@ from home_data.pipeline import (
     parse_vgv_annual_workbook,
     validate_frame,
 )
+from home_data.r2_sync import normalise_r2_endpoint
 from home_data.sources import HomesVictoriaRentalAdapter, VgvAnnualSalesAdapter
 from home_data.storage import LocalMedallionStore
 
@@ -173,3 +174,14 @@ def test_resend_alert_is_idempotent(tmp_path):
     assert first.status == "sent"
     assert second.status == "unchanged"
     assert len(calls) == 1
+
+
+def test_r2_endpoint_accepts_bucket_qualified_url():
+    account = "https://example.r2.cloudflarestorage.com"
+    assert normalise_r2_endpoint(account, "victorian-home-medallion") == account
+    assert (
+        normalise_r2_endpoint(
+            f"{account}/victorian-home-medallion", "victorian-home-medallion"
+        )
+        == account
+    )
