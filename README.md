@@ -2,6 +2,8 @@
 
 An end-to-end data engineering project that converts Victorian Government property data into a governed suburb-level investment screening dataset. The current deployment uses free-tier services: GitHub Actions, private Cloudflare R2 object storage, Supabase PostgreSQL, Python and an optional Streamlit dashboard.
 
+**Live dashboard:** [Victorian Home Investment Screen](https://victorian-home-data-platform-khqoosevqis9pzjyzkd2se.streamlit.app/)
+
 > The ROI output is an indicative research screen, not a valuation, forecast or financial recommendation. It excludes vacancy, finance, tax, maintenance, rates, insurance, strata and transaction costs.
 
 ## What is running
