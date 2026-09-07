@@ -1,1 +1,1 @@
-.[free-cloud]
+-e .[free-cloud]
