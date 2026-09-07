@@ -62,7 +62,7 @@ The schedule is minute 17 every 12 hours in UTC. GitHub schedules can be delayed
 
 ## 7 Deploy Streamlit
 
-Connect Streamlit Community Cloud to the GitHub repository and choose `streamlit_app.py`. Add `SUPABASE_DB_URL` to Streamlit secrets using the read-only dashboard connection, not the ETL connection. The app caches queries for one hour and never writes to PostgreSQL.
+Connect Streamlit Community Cloud to the GitHub repository and choose `streamlit_app.py`. Community Cloud installs `requirements.txt`, which selects the project's `free-cloud` dependency group. Add `SUPABASE_DB_URL` to Streamlit secrets using the read-only dashboard connection, not the ETL connection. The app caches queries for one hour and never writes to PostgreSQL.
 
 ## 8 Backups and recovery
 
