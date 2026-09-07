@@ -1,16 +1,87 @@
 import os
 
+import httpx
 import pandas as pd
 import psycopg
 import streamlit as st
 from psycopg import Error as PostgresError
 from streamlit.errors import StreamlitSecretNotFoundError
 
+from home_data.dashboard_auth import sign_in, sign_up
+
 st.set_page_config(
     page_title="Victorian Home Investment Screen",
     page_icon="🏠",
     layout="wide",
 )
+
+
+def setting(name: str) -> str | None:
+    value = os.getenv(name)
+    if value:
+        return value
+    try:
+        return st.secrets.get(name)
+    except StreamlitSecretNotFoundError:
+        return None
+
+
+def render_auth(supabase_url: str, publishable_key: str) -> None:
+    st.title("Victorian Home Investment Screen")
+    st.caption("Sign in to access the private property investment screening dashboard.")
+    sign_in_tab, sign_up_tab = st.tabs(["Sign in", "Create account"])
+
+    with sign_in_tab:
+        with st.form("sign_in_form"):
+            email = st.text_input("Email", autocomplete="email")
+            password = st.text_input("Password", type="password", autocomplete="current-password")
+            submitted = st.form_submit_button("Sign in", type="primary", width="stretch")
+        if submitted:
+            try:
+                result = sign_in(supabase_url, publishable_key, email, password)
+            except (httpx.HTTPError, ValueError):
+                st.error("Authentication is temporarily unavailable. Please try again.")
+            else:
+                if result.authenticated:
+                    st.session_state.authenticated = True
+                    st.session_state.user_email = result.email
+                    st.session_state.access_token = result.access_token
+                    st.rerun()
+                st.error(result.message)
+
+    with sign_up_tab:
+        with st.form("sign_up_form"):
+            email = st.text_input("Email", key="signup_email", autocomplete="email")
+            password = st.text_input(
+                "Password (minimum 8 characters)",
+                type="password",
+                key="signup_password",
+                autocomplete="new-password",
+            )
+            submitted = st.form_submit_button("Create account", width="stretch")
+        if submitted:
+            try:
+                result = sign_up(supabase_url, publishable_key, email, password)
+            except (httpx.HTTPError, ValueError):
+                st.error("Authentication is temporarily unavailable. Please try again.")
+            else:
+                if result.authenticated:
+                    st.session_state.authenticated = True
+                    st.session_state.user_email = result.email
+                    st.session_state.access_token = result.access_token
+                    st.rerun()
+                st.success(result.message)
+
+
+supabase_url = setting("SUPABASE_URL")
+publishable_key = setting("SUPABASE_PUBLISHABLE_KEY")
+if not supabase_url or not publishable_key:
+    st.error("Dashboard authentication is not configured.")
+    st.stop()
+if not st.session_state.get("authenticated"):
+    render_auth(supabase_url, publishable_key)
+    st.stop()
+
 st.title("Victorian Home Investment Screen")
 st.caption(
     "Compare suburb cohorts using Victorian Government median prices and rents. "
@@ -32,12 +103,7 @@ def load_data(database_url: str | None, local_data_path: str | None) -> pd.DataF
 
 
 local_data_path = os.getenv("DASHBOARD_DATA_PATH")
-database_url = os.getenv("SUPABASE_DB_URL")
-if not database_url and not local_data_path:
-    try:
-        database_url = st.secrets.get("SUPABASE_DB_URL")
-    except StreamlitSecretNotFoundError:
-        database_url = None
+database_url = setting("SUPABASE_DB_URL")
 if not database_url and not local_data_path:
     st.error("SUPABASE_DB_URL is not configured. Local development may use DASHBOARD_DATA_PATH.")
     st.stop()
@@ -52,6 +118,11 @@ if data.empty:
     st.stop()
 
 st.sidebar.header("Screening filters")
+st.sidebar.caption(f"Signed in as {st.session_state.get('user_email', 'user')}")
+if st.sidebar.button("Sign out", width="stretch"):
+    for key in ("authenticated", "user_email", "access_token"):
+        st.session_state.pop(key, None)
+    st.rerun()
 property_types = st.sidebar.multiselect(
     "Property type",
     sorted(data["property_type"].unique()),

@@ -62,7 +62,17 @@ The schedule is minute 17 every 12 hours in UTC. GitHub schedules can be delayed
 
 ## 7 Deploy Streamlit
 
-Connect Streamlit Community Cloud to the GitHub repository and choose `streamlit_app.py`. Community Cloud installs `requirements.txt`, which selects the project's `free-cloud` dependency group. Add `SUPABASE_DB_URL` to Streamlit secrets using the read-only dashboard connection, not the ETL connection. The app caches queries for one hour and never writes to PostgreSQL.
+Connect Streamlit Community Cloud to the GitHub repository and choose `streamlit_app.py`. Community Cloud installs `requirements.txt`, which selects the project's `free-cloud` dependency group. Add the following Streamlit secrets:
+
+```toml
+SUPABASE_DB_URL = "postgresql://read-only-dashboard-user:password@host:5432/postgres"
+SUPABASE_URL = "https://your-project.supabase.co"
+SUPABASE_PUBLISHABLE_KEY = "your-publishable-key"
+```
+
+Use a read-only database connection for `SUPABASE_DB_URL`, not the ETL connection. Find the project URL and publishable key under Supabase **Project Settings → API**. The publishable key is designed for client authentication; never put the service-role key in Streamlit. Enable email/password under **Authentication → Sign In / Providers**, configure the Site URL under **Authentication → URL Configuration**, and decide whether new accounts must confirm their email.
+
+The app gates the dashboard with Supabase Auth, caches database reads for one hour and never writes to PostgreSQL. This is application-level access control; database access remains through the server-side read-only credential.
 
 ## 8 Backups and recovery
 
