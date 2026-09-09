@@ -8,6 +8,7 @@ Use this page as the entry point for the project documentation.
 | [Medallion architecture](medallion-architecture.md) | Understand Bronze, Silver, Gold, paths and promotion rules |
 | [Data model and metrics](data-model.md) | Query the products or interpret yield, growth and score fields |
 | [Free-cloud deployment](free-cloud-deployment.md) | Configure R2, Supabase, GitHub Actions, Resend and Streamlit |
+| [Watchlists and alerts](watchlists-and-alerts.md) | Per-user RLS, thresholds, delivery audit and least-privilege access |
 | [Operations runbook](operations-runbook.md) | Run, verify, recover or update the production pipeline |
 | [Implementation guide](implementation-guide.md) | Build and exercise the project step by step |
 | [Logging and errors](logging-and-errors.md) | Investigate JSONL logs and common failures |

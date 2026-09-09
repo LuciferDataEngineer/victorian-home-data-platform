@@ -9,6 +9,7 @@ from home_data.pipeline import build_official_gold, build_roi_gold, ingest_sourc
 from home_data.postgres_loader import load_roi_to_postgres
 from home_data.r2_sync import R2MedallionSync
 from home_data.storage import LocalMedallionStore
+from home_data.watchlist_alerts import evaluate_watchlist_alerts
 
 LOGGER = logging.getLogger(__name__)
 
@@ -82,6 +83,16 @@ def run_free_cloud_refresh(data_root: Path) -> str:
         api_key=os.getenv("RESEND_API_KEY"),
         to_email=os.getenv("ALERT_TO_EMAIL"),
         from_email=os.getenv("ALERT_FROM_EMAIL", "alerts@example.invalid"),
+        dry_run=os.getenv("ALERT_DRY_RUN", "true").lower() == "true",
+    )
+    evaluate_watchlist_alerts(
+        _required("SUPABASE_DB_URL"),
+        api_key=os.getenv("RESEND_API_KEY"),
+        from_email=os.getenv("ALERT_FROM_EMAIL", "alerts@example.invalid"),
+        dashboard_url=os.getenv(
+            "DASHBOARD_URL",
+            "https://victorian-home-data-platform-khqoosevqis9pzjyzkd2se.streamlit.app/",
+        ),
         dry_run=os.getenv("ALERT_DRY_RUN", "true").lower() == "true",
     )
     sync.upload(data_root)

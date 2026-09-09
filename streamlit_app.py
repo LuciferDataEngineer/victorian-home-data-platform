@@ -8,6 +8,7 @@ from psycopg import Error as PostgresError
 from streamlit.errors import StreamlitSecretNotFoundError
 
 from home_data.dashboard_auth import sign_in, sign_up
+from home_data.watchlists import WatchlistClient
 
 st.set_page_config(
     page_title="Victorian Home Investment Screen",
@@ -213,6 +214,68 @@ st.dataframe(
         "Score": st.column_config.NumberColumn(format="%.1f"),
     },
 )
+
+st.subheader("My watchlist alerts")
+watchlist_client = WatchlistClient(
+    supabase_url, publishable_key, st.session_state.get("access_token", "")
+)
+with st.expander("Add or update a watchlist", expanded=False):
+    available = data.sort_values(["canonical_suburb_key", "property_type", "bedrooms"])
+    cohort_labels = available.apply(
+        lambda row: f"{row['canonical_suburb_key']} · {row['property_type']} · {row['bedrooms']} bed",
+        axis=1,
+    )
+    selected_label = st.selectbox("Suburb cohort", cohort_labels.tolist())
+    selected = available.loc[cohort_labels[cohort_labels == selected_label].index[0]]
+    threshold_left, threshold_middle, threshold_right = st.columns(3)
+    alert_yield = threshold_left.number_input(
+        "Minimum gross yield %", min_value=0.0, value=float(selected["estimated_gross_yield_pct"]), step=0.1
+    )
+    alert_score = threshold_middle.number_input(
+        "Minimum score",
+        min_value=0.0,
+        value=float(selected["indicative_score"] if pd.notna(selected["indicative_score"]) else 0),
+        step=1.0,
+    )
+    alert_price = threshold_right.number_input(
+        "Maximum median price", min_value=0.0, value=float(selected["median_price"]), step=10_000.0
+    )
+    if st.button("Save alert", type="primary"):
+        try:
+            watchlist_client.save(
+                {
+                    "canonical_suburb_key": selected["canonical_suburb_key"],
+                    "property_type": selected["property_type"],
+                    "bedrooms": int(selected["bedrooms"]),
+                    "min_gross_yield_pct": alert_yield,
+                    "min_score": alert_score,
+                    "max_median_price": alert_price,
+                }
+            )
+            st.success("Watchlist saved.")
+        except httpx.HTTPError:
+            st.error("The watchlist could not be saved. Confirm migration 002 has been applied.")
+
+try:
+    saved_watchlists = watchlist_client.list()
+except httpx.HTTPError:
+    st.info("Watchlists will be available after the database migration is applied.")
+else:
+    if not saved_watchlists:
+        st.caption("No saved alerts yet.")
+    for saved in saved_watchlists:
+        label, action = st.columns([5, 1])
+        label.write(
+            f"**{saved['canonical_suburb_key']}** · {saved['property_type']} · "
+            f"{saved['bedrooms']} bed · yield ≥ {saved['min_gross_yield_pct']}% · "
+            f"score ≥ {saved['min_score']} · price ≤ A${saved['max_median_price']:,.0f}"
+        )
+        if action.button("Remove", key=f"delete-{saved['id']}"):
+            try:
+                watchlist_client.delete(saved["id"])
+                st.rerun()
+            except httpx.HTTPError:
+                st.error("The watchlist could not be removed.")
 st.info(
     "Gross yield excludes vacancy, finance, rates, tax, insurance, maintenance, strata and transaction costs."
 )

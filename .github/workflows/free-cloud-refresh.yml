@@ -34,6 +34,7 @@ jobs:
           ALERT_TO_EMAIL: ${{ vars.ALERT_TO_EMAIL }}
           ALERT_FROM_EMAIL: ${{ vars.ALERT_FROM_EMAIL }}
           ALERT_DRY_RUN: ${{ vars.ALERT_DRY_RUN || 'true' }}
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
         run: home-data free-cloud-refresh
       - name: Upload failure logs
         if: failure()
