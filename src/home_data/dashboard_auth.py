@@ -73,3 +73,64 @@ def sign_up(
         email=payload.get("user", {}).get("email", email.strip()),
         access_token=token,
     )
+
+
+def request_password_recovery(
+    supabase_url: str,
+    publishable_key: str,
+    email: str,
+    redirect_to: str,
+    client: httpx.Client | None = None,
+) -> str:
+    if not email.strip():
+        return "Enter your email address."
+    response = (client or httpx.Client(timeout=20)).post(
+        f"{supabase_url.rstrip('/')}/auth/v1/recover",
+        params={"redirect_to": redirect_to},
+        headers={"apikey": publishable_key},
+        json={"email": email.strip()},
+    )
+    if response.is_error:
+        return _message(response, "Password recovery could not be started.")
+    return "Check your email for the password-reset link."
+
+
+def verify_recovery_token(
+    supabase_url: str,
+    publishable_key: str,
+    token_hash: str,
+    client: httpx.Client | None = None,
+) -> AuthResult:
+    response = (client or httpx.Client(timeout=20)).post(
+        f"{supabase_url.rstrip('/')}/auth/v1/verify",
+        headers={"apikey": publishable_key},
+        json={"token_hash": token_hash, "type": "recovery"},
+    )
+    if response.is_error:
+        return AuthResult(False, _message(response, "This recovery link is invalid or expired."))
+    payload = response.json()
+    return AuthResult(
+        True,
+        "Recovery link verified.",
+        email=payload.get("user", {}).get("email"),
+        access_token=payload.get("access_token"),
+    )
+
+
+def update_password(
+    supabase_url: str,
+    publishable_key: str,
+    access_token: str,
+    password: str,
+    client: httpx.Client | None = None,
+) -> str:
+    if len(password) < 8:
+        return "Use a password with at least 8 characters."
+    response = (client or httpx.Client(timeout=20)).put(
+        f"{supabase_url.rstrip('/')}/auth/v1/user",
+        headers={"apikey": publishable_key, "Authorization": f"Bearer {access_token}"},
+        json={"password": password},
+    )
+    if response.is_error:
+        return _message(response, "The password could not be updated.")
+    return "Password updated. You can now sign in."

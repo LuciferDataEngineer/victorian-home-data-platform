@@ -74,6 +74,14 @@ Use a read-only database connection for `SUPABASE_DB_URL`, not the ETL connectio
 
 The app gates the dashboard with Supabase Auth, caches database reads for one hour and never writes to PostgreSQL. This is application-level access control; database access remains through the server-side read-only credential.
 
+For password recovery, set the Supabase recovery email template link to:
+
+```html
+<a href="{{ .SiteURL }}?token_hash={{ .TokenHash }}&type=recovery">Reset password</a>
+```
+
+Set the Supabase Site URL to the Streamlit application URL. The app verifies the one-time token hash with Supabase before displaying the new-password form.
+
 ## 8 Backups and recovery
 
 Manually run `backup-supabase` once and verify a dated custom-format dump under `backups/supabase/` in R2. The workflow repeats weekly. Periodically test restoration into a disposable Supabase project; an untested backup is not a recovery plan.

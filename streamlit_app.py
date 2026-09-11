@@ -7,7 +7,13 @@ import streamlit as st
 from psycopg import Error as PostgresError
 from streamlit.errors import StreamlitSecretNotFoundError
 
-from home_data.dashboard_auth import sign_in, sign_up
+from home_data.dashboard_auth import (
+    request_password_recovery,
+    sign_in,
+    sign_up,
+    update_password,
+    verify_recovery_token,
+)
 from home_data.watchlists import WatchlistClient
 
 st.set_page_config(
@@ -25,6 +31,42 @@ def setting(name: str) -> str | None:
         return st.secrets.get(name)
     except StreamlitSecretNotFoundError:
         return None
+
+
+def render_password_reset(supabase_url: str, publishable_key: str, token_hash: str) -> None:
+    st.title("Reset your password")
+    if "recovery_access_token" not in st.session_state:
+        try:
+            result = verify_recovery_token(supabase_url, publishable_key, token_hash)
+        except (httpx.HTTPError, ValueError):
+            st.error("This recovery link is invalid or expired.")
+            st.stop()
+        if not result.authenticated or not result.access_token:
+            st.error(result.message)
+            st.stop()
+        st.session_state.recovery_access_token = result.access_token
+    with st.form("password_reset_form"):
+        password = st.text_input("New password", type="password", autocomplete="new-password")
+        confirmation = st.text_input(
+            "Confirm new password", type="password", autocomplete="new-password"
+        )
+        submitted = st.form_submit_button("Update password", type="primary")
+    if submitted:
+        if password != confirmation:
+            st.error("Passwords do not match.")
+        else:
+            message = update_password(
+                supabase_url,
+                publishable_key,
+                st.session_state.recovery_access_token,
+                password,
+            )
+            if message.startswith("Password updated"):
+                st.session_state.pop("recovery_access_token", None)
+                st.query_params.clear()
+                st.success(message)
+            else:
+                st.error(message)
 
 
 def render_auth(supabase_url: str, publishable_key: str) -> None:
@@ -49,6 +91,19 @@ def render_auth(supabase_url: str, publishable_key: str) -> None:
                     st.session_state.access_token = result.access_token
                     st.rerun()
                 st.error(result.message)
+        with st.expander("Forgot password?"):
+            recovery_email = st.text_input("Recovery email", autocomplete="email")
+            if st.button("Send reset link"):
+                try:
+                    message = request_password_recovery(
+                        supabase_url,
+                        publishable_key,
+                        recovery_email,
+                        "https://victorian-home-data-platform-khqoosevqis9pzjyzkd2se.streamlit.app/",
+                    )
+                    st.info(message)
+                except httpx.HTTPError:
+                    st.error("Password recovery is temporarily unavailable.")
 
     with sign_up_tab:
         with st.form("sign_up_form"):
@@ -78,6 +133,10 @@ supabase_url = setting("SUPABASE_URL")
 publishable_key = setting("SUPABASE_PUBLISHABLE_KEY")
 if not supabase_url or not publishable_key:
     st.error("Dashboard authentication is not configured.")
+    st.stop()
+recovery_token_hash = st.query_params.get("token_hash")
+if recovery_token_hash and st.query_params.get("type") == "recovery":
+    render_password_reset(supabase_url, publishable_key, recovery_token_hash)
     st.stop()
 if not st.session_state.get("authenticated"):
     render_auth(supabase_url, publishable_key)
