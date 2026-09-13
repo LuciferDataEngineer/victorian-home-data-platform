@@ -1,13 +1,12 @@
 import os
-from urllib.parse import parse_qs
 
 import httpx
 import pandas as pd
 import psycopg
 import streamlit as st
+import streamlit.components.v1 as components
 from psycopg import Error as PostgresError
 from streamlit.errors import StreamlitSecretNotFoundError
-from streamlit_js_eval import get_page_location
 
 from home_data.dashboard_auth import (
     request_password_recovery,
@@ -33,6 +32,26 @@ def setting(name: str) -> str | None:
         return st.secrets.get(name)
     except StreamlitSecretNotFoundError:
         return None
+
+
+def promote_recovery_fragment() -> None:
+    """Move Supabase's recovery URL fragment into query parameters Streamlit can read."""
+    components.html(
+        """
+        <script>
+        try {
+          const parentUrl = new URL(window.parent.location.href);
+          const fragment = new URLSearchParams(parentUrl.hash.slice(1));
+          if (fragment.get("type") === "recovery" && fragment.get("access_token")) {
+            parentUrl.hash = "";
+            for (const [key, value] of fragment.entries()) parentUrl.searchParams.set(key, value);
+            window.parent.location.replace(parentUrl.toString());
+          }
+        } catch (_) {}
+        </script>
+        """,
+        height=0,
+    )
 
 
 def render_password_reset(
@@ -149,12 +168,6 @@ if not supabase_url or not publishable_key:
     st.stop()
 recovery_token_hash = st.query_params.get("token_hash")
 recovery_access_token = st.query_params.get("access_token")
-page_location = get_page_location()
-if isinstance(page_location, dict) and page_location.get("hash"):
-    fragment = page_location["hash"].lstrip("#")
-    fragment_values = {key: values[0] for key, values in parse_qs(fragment).items() if values}
-    if fragment_values.get("type") == "recovery":
-        recovery_access_token = fragment_values.get("access_token")
 if st.query_params.get("type") == "recovery" and (
     recovery_token_hash or recovery_access_token
 ):
@@ -165,9 +178,7 @@ if st.query_params.get("type") == "recovery" and (
         access_token=recovery_access_token,
     )
     st.stop()
-if recovery_access_token and isinstance(page_location, dict):
-    render_password_reset(supabase_url, publishable_key, access_token=recovery_access_token)
-    st.stop()
+promote_recovery_fragment()
 if not st.session_state.get("authenticated"):
     render_auth(supabase_url, publishable_key)
     st.stop()

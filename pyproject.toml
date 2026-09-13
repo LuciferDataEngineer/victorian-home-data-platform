@@ -30,7 +30,6 @@ free-cloud = [
   "boto3>=1.35,<2",
   "psycopg[binary]>=3.2,<4",
   "streamlit>=1.40,<2",
-  "streamlit-js-eval>=1.0,<2",
 ]
 
 [project.scripts]
