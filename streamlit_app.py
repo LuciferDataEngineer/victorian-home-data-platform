@@ -288,6 +288,71 @@ st.scatter_chart(
     color="property_type",
 )
 
+st.subheader("Shortlist opportunities")
+st.caption("Sorted by the certified indicative score; use the underlying yield, price and growth columns to validate each candidate.")
+ranked = filtered.sort_values(
+    ["indicative_score", "estimated_gross_yield_pct", "price_growth_cagr_pct"],
+    ascending=False,
+    na_position="last",
+).head(10)
+rank_columns = {
+    "canonical_suburb_key": "Suburb",
+    "property_type": "Type",
+    "bedrooms": "Beds",
+    "median_price": "Median price",
+    "estimated_gross_yield_pct": "Yield %",
+    "price_growth_cagr_pct": "CAGR %",
+    "indicative_score": "Score",
+}
+st.dataframe(
+    ranked[list(rank_columns)].rename(columns=rank_columns),
+    width="stretch",
+    hide_index=True,
+    column_config={
+        "Median price": st.column_config.NumberColumn(format="A$%.0f"),
+        "Yield %": st.column_config.NumberColumn(format="%.2f%%"),
+        "CAGR %": st.column_config.NumberColumn(format="%.2f%%"),
+        "Score": st.column_config.NumberColumn(format="%.1f"),
+    },
+)
+
+detail_left, detail_right = st.columns([1, 1])
+with detail_left:
+    st.subheader("Cohort detail")
+    detail_labels = filtered.apply(
+        lambda row: f"{row['canonical_suburb_key']} · {row['property_type']} · {row['bedrooms']} bed",
+        axis=1,
+    )
+    detail_label = st.selectbox("Inspect a filtered cohort", detail_labels.tolist())
+    detail = filtered.loc[detail_labels[detail_labels == detail_label].index[0]]
+    detail_metrics = st.columns(3)
+    detail_metrics[0].metric("Median price", f"A${detail['median_price']:,.0f}")
+    detail_metrics[1].metric("Weekly rent", f"A${detail['median_weekly_rent']:,.0f}")
+    detail_metrics[2].metric("Gross yield", f"{detail['estimated_gross_yield_pct']:.2f}%")
+    st.write(
+        f"Historical price CAGR: **{detail['price_growth_cagr_pct']:.2f}%** · "
+        f"Indicative score: **{detail['indicative_score']:.1f}**"
+    )
+
+with detail_right:
+    st.subheader("Purchase scenario calculator")
+    st.caption("Illustrative estimates only. Excludes tax, stamp duty, insurance, maintenance, strata and other ownership costs.")
+    purchase_price = st.number_input("Purchase price", min_value=0.0, value=float(detail["median_price"]), step=10_000.0)
+    deposit_pct = st.slider("Deposit %", min_value=5, max_value=80, value=20, step=5)
+    interest_rate = st.number_input("Annual interest rate %", min_value=0.0, max_value=20.0, value=6.0, step=0.1)
+    vacancy_pct = st.slider("Vacancy allowance %", min_value=0, max_value=30, value=4, step=1)
+    annual_costs = st.number_input("Other annual costs", min_value=0.0, value=8_000.0, step=500.0)
+    loan = purchase_price * (1 - deposit_pct / 100)
+    annual_rent = float(detail["median_weekly_rent"]) * 52 * (1 - vacancy_pct / 100)
+    annual_interest = loan * interest_rate / 100
+    net_cash_flow = annual_rent - annual_interest - annual_costs
+    cash_invested = purchase_price * deposit_pct / 100
+    cash_return = (net_cash_flow / cash_invested * 100) if cash_invested else 0.0
+    calc_metrics = st.columns(3)
+    calc_metrics[0].metric("Estimated loan", f"A${loan:,.0f}")
+    calc_metrics[1].metric("Net annual cash flow", f"A${net_cash_flow:,.0f}")
+    calc_metrics[2].metric("Cash-on-cash", f"{cash_return:.2f}%")
+
 st.subheader("Screening table")
 display_columns = {
     "canonical_suburb_key": "Suburb",
@@ -313,6 +378,12 @@ st.dataframe(
         "Price CAGR %": st.column_config.NumberColumn(format="%.2f%%"),
         "Score": st.column_config.NumberColumn(format="%.1f"),
     },
+)
+st.download_button(
+    "Download filtered screening CSV",
+    data=screen.to_csv(index=False).encode("utf-8"),
+    file_name="victorian_home_screening.csv",
+    mime="text/csv",
 )
 
 st.subheader("My watchlist alerts")
@@ -379,6 +450,13 @@ else:
 st.info(
     "Gross yield excludes vacancy, finance, rates, tax, insurance, maintenance, strata and transaction costs."
 )
+with st.expander("Data quality and interpretation notes"):
+    st.markdown(
+        "- Price and rent figures are cohort medians, not individual property valuations.\n"
+        "- Historical CAGR describes the available observation window; it is not a forecast.\n"
+        "- Missing or stale source observations should be investigated before making an offer.\n"
+        "- Validate planning controls, flood/fire risk, transport, comparable sales and lending assumptions independently."
+    )
 freshness = (
     f"Latest published database timestamp: "
     f"{pd.to_datetime(data['published_at']).max():%d %b %Y, %H:%M %Z}. "
