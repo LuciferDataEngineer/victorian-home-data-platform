@@ -3,6 +3,7 @@ import os
 import httpx
 import pandas as pd
 import psycopg
+import pydeck as pdk
 import streamlit as st
 import streamlit.components.v1 as components
 from psycopg import Error as PostgresError
@@ -15,6 +16,8 @@ from home_data.dashboard_auth import (
     update_password,
     verify_recovery_token,
 )
+from home_data.geography import canonical_suburb_key
+from home_data.map_data import polygon_centroid
 from home_data.watchlists import WatchlistClient
 
 st.set_page_config(
@@ -203,6 +206,50 @@ def load_data(database_url: str | None, local_data_path: str | None) -> pd.DataF
         return pd.read_sql("select * from mart.vw_dashboard_roi", connection)
 
 
+@st.cache_data(ttl=86_400, max_entries=10)
+def load_locality_centroids(localities: tuple[str, ...]) -> pd.DataFrame:
+    """Fetch approximate point locations from the official Vicmap locality polygons."""
+    if not localities:
+        return pd.DataFrame(columns=["canonical_suburb_key", "longitude", "latitude"])
+    safe_names = [name.replace("'", "''") for name in localities]
+    name_list = ", ".join(f"'{name}'" for name in safe_names)
+    response = httpx.get(
+        "https://services-ap1.arcgis.com/P744lA0wf4LlBZ84/arcgis/rest/services/"
+        "Vicmap_Admin/FeatureServer/11/query",
+        params={
+            "where": f"upper(locality_name) IN ({name_list})",
+            "outFields": "locality_name",
+            "returnGeometry": "true",
+            "maxAllowableOffset": "0.002",
+            "geometryPrecision": "4",
+            "outSR": "4326",
+            "f": "json",
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get("error"):
+        raise ValueError("Vicmap locality lookup returned an error")
+    locations = []
+    for feature in payload.get("features", []):
+        attributes = feature.get("attributes", {})
+        geometry = feature.get("geometry", {})
+        centroid = polygon_centroid(geometry.get("rings", []))
+        if centroid and attributes.get("locality_name"):
+            longitude, latitude = centroid
+            locations.append(
+                {
+                    "canonical_suburb_key": canonical_suburb_key(attributes["locality_name"]),
+                    "longitude": longitude,
+                    "latitude": latitude,
+                }
+            )
+    if not locations:
+        raise ValueError("Vicmap returned no matching locality locations")
+    return pd.DataFrame(locations).drop_duplicates("canonical_suburb_key")
+
+
 local_data_path = os.getenv("DASHBOARD_DATA_PATH")
 database_url = setting("SUPABASE_DB_URL")
 if not database_url and not local_data_path:
@@ -287,6 +334,87 @@ st.scatter_chart(
     size="median_price",
     color="property_type",
 )
+
+st.subheader("Explore areas on the map")
+st.caption(
+    "Each marker represents a suburb/locality median, not a home listing or a precise property location. "
+    "Sale-price medians are by property type, not bedroom count; rent and estimated yield vary by bedroom cohort."
+)
+map_property_type = st.selectbox(
+    "Map property type", sorted(filtered["property_type"].dropna().unique()), key="map_property_type"
+)
+map_type_rows = filtered[filtered["property_type"] == map_property_type]
+map_bedrooms = st.selectbox(
+    "Bedrooms on map",
+    sorted(map_type_rows["bedrooms"].dropna().unique()),
+    key="map_bedrooms",
+)
+map_rows = map_type_rows[map_type_rows["bedrooms"] == map_bedrooms].copy()
+localities = tuple(sorted(map_rows["canonical_suburb_key"].dropna().unique()))
+try:
+    centroids = load_locality_centroids(localities)
+except (httpx.HTTPError, ValueError):
+    st.warning("The map locations are temporarily unavailable; the screening table below is still usable.")
+else:
+    map_rows = map_rows.merge(centroids, on="canonical_suburb_key", how="inner")
+    if map_rows.empty:
+        st.info("No map points matched these cohorts. Check the source geography names.")
+    else:
+        map_rows["price_label"] = map_rows["median_price"].map(
+            lambda value: f"A${value / 1_000:,.0f}k"
+        )
+        deck = pdk.Deck(
+            layers=[
+                pdk.Layer(
+                    "ScatterplotLayer",
+                    data=map_rows,
+                    get_position="[longitude, latitude]",
+                    get_radius=5_000,
+                    radius_min_pixels=10,
+                    radius_max_pixels=24,
+                    get_fill_color=[255, 255, 255, 245],
+                    get_line_color=[48, 75, 124, 230],
+                    line_width_min_pixels=2,
+                    stroked=True,
+                    pickable=True,
+                    auto_highlight=True,
+                ),
+                pdk.Layer(
+                    "TextLayer",
+                    data=map_rows,
+                    get_position="[longitude, latitude]",
+                    get_text="price_label",
+                    get_size=11,
+                    get_color=[35, 45, 65, 255],
+                    get_pixel_offset=[0, 0],
+                    get_text_anchor="middle",
+                    get_alignment_baseline="center",
+                ),
+            ],
+            initial_view_state=pdk.ViewState(
+                latitude=-36.8,
+                longitude=144.3,
+                zoom=5.3,
+                min_zoom=4,
+                max_zoom=13,
+            ),
+            map_style=pdk.map_styles.CARTO_ROAD,
+            tooltip={
+                "html": (
+                    "<b>{canonical_suburb_key}</b><br/>Median sale price: A${median_price}<br/>"
+                    "Median weekly rent: A${median_weekly_rent}<br/>"
+                    "Gross yield: {estimated_gross_yield_pct}%<br/>"
+                    "Historical price CAGR: {price_growth_cagr_pct}%"
+                ),
+                "style": {"backgroundColor": "white", "color": "#172033"},
+            },
+            height=560,
+        )
+        st.pydeck_chart(deck, width="stretch")
+        st.caption(
+            f"Showing {len(map_rows)} matched areas · Vicmap Admin locality boundaries, "
+            "centres simplified to approximate marker positions (CC BY 4.0)."
+        )
 
 st.subheader("Shortlist opportunities")
 st.caption("Sorted by the certified indicative score; use the underlying yield, price and growth columns to validate each candidate.")

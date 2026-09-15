@@ -7,6 +7,7 @@ from openpyxl import Workbook
 
 from home_data.alerts import send_gold_change_alert
 from home_data.geography import canonical_suburb_key
+from home_data.map_data import polygon_centroid
 from home_data.operations import _manual_vgv_inputs_changed
 from home_data.pipeline import (
     build_gold,
@@ -113,6 +114,12 @@ def test_homes_victoria_manual_drop_adapter(tmp_path):
 def test_conservative_geography_key():
     assert canonical_suburb_key("St Kilda (Vic.)") == "ST KILDA"
     assert canonical_suburb_key("  Mount-Waverley ") == "MOUNT WAVERLEY"
+
+
+def test_vicmap_polygon_centroid():
+    ring = [[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]
+    assert polygon_centroid([ring]) == (0.5, 0.5)
+    assert polygon_centroid([]) is None
 
 
 def test_governed_roi_mart_keeps_bedroom_grain(tmp_path):
