@@ -27,6 +27,22 @@ st.set_page_config(
 )
 
 
+def yield_band(value: float) -> str:
+    """Apply simple gross-yield screening bands; these are not investment advice."""
+    if value < 3:
+        return "Lower yield"
+    if value < 5:
+        return "Medium yield"
+    return "Higher yield"
+
+
+YIELD_COLOURS = {
+    "Lower yield": [214, 74, 74, 230],
+    "Medium yield": [230, 166, 52, 230],
+    "Higher yield": [42, 156, 92, 230],
+}
+
+
 def setting(name: str) -> str | None:
     value = os.getenv(name)
     if value:
@@ -340,6 +356,10 @@ st.caption(
     "Each marker represents a suburb/locality median, not a home listing or a precise property location. "
     "Sale-price medians are by property type, not bedroom count; rent and estimated yield vary by bedroom cohort."
 )
+legend_left, legend_middle, legend_right = st.columns(3)
+legend_left.markdown("🔴 **Lower yield**  \nGross yield < 3%")
+legend_middle.markdown("🟠 **Medium yield**  \nGross yield 3%–<5%")
+legend_right.markdown("🟢 **Higher yield**  \nGross yield ≥ 5%")
 map_property_type = st.selectbox(
     "Map property type", sorted(filtered["property_type"].dropna().unique()), key="map_property_type"
 )
@@ -363,6 +383,8 @@ else:
         map_rows["price_label"] = map_rows["median_price"].map(
             lambda value: f"A${value / 1_000:,.0f}k"
         )
+        map_rows["yield_band"] = map_rows["estimated_gross_yield_pct"].map(yield_band)
+        map_rows["marker_color"] = map_rows["yield_band"].map(YIELD_COLOURS)
         deck = pdk.Deck(
             layers=[
                 pdk.Layer(
@@ -372,8 +394,8 @@ else:
                     get_radius=5_000,
                     radius_min_pixels=10,
                     radius_max_pixels=24,
-                    get_fill_color=[255, 255, 255, 245],
-                    get_line_color=[48, 75, 124, 230],
+                    get_fill_color="marker_color",
+                    get_line_color=[255, 255, 255, 245],
                     line_width_min_pixels=2,
                     stroked=True,
                     pickable=True,
@@ -403,7 +425,7 @@ else:
                 "html": (
                     "<b>{canonical_suburb_key}</b><br/>Median sale price: A${median_price}<br/>"
                     "Median weekly rent: A${median_weekly_rent}<br/>"
-                    "Gross yield: {estimated_gross_yield_pct}%<br/>"
+                    "Gross yield: {estimated_gross_yield_pct}% ({yield_band})<br/>"
                     "Historical price CAGR: {price_growth_cagr_pct}%"
                 ),
                 "style": {"backgroundColor": "white", "color": "#172033"},
@@ -431,16 +453,20 @@ rank_columns = {
     "estimated_gross_yield_pct": "Yield %",
     "price_growth_cagr_pct": "CAGR %",
     "indicative_score": "Score",
+    "yield_band": "Yield band",
 }
 st.dataframe(
-    ranked[list(rank_columns)].rename(columns=rank_columns),
+    ranked.assign(yield_band=ranked["estimated_gross_yield_pct"].map(yield_band))[
+        list(rank_columns)
+    ].rename(columns=rank_columns),
     width="stretch",
     hide_index=True,
     column_config={
         "Median price": st.column_config.NumberColumn(format="A$%.0f"),
         "Yield %": st.column_config.NumberColumn(format="%.2f%%"),
         "CAGR %": st.column_config.NumberColumn(format="%.2f%%"),
-        "Score": st.column_config.NumberColumn(format="%.1f"),
+    "Score": st.column_config.NumberColumn(format="%.1f"),
+        "Yield band": st.column_config.TextColumn(),
     },
 )
 
@@ -491,10 +517,13 @@ display_columns = {
     "estimated_gross_yield_pct": "Gross yield %",
     "price_growth_cagr_pct": "Price CAGR %",
     "indicative_score": "Score",
+    "yield_band": "Yield band",
     "price_observation_date": "Price date",
     "rent_period_end": "Rent date",
 }
-screen = filtered[list(display_columns)].rename(columns=display_columns)
+screen = filtered.assign(yield_band=filtered["estimated_gross_yield_pct"].map(yield_band))[
+    list(display_columns)
+].rename(columns=display_columns)
 st.dataframe(
     screen.sort_values(["Score", "Gross yield %"], ascending=False),
     width="stretch",
